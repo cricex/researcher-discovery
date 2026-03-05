@@ -1,0 +1,22 @@
+{
+  "name": "orchestration-agent",
+  "private": true,
+  "version": "0.1.0",
+  "description": "An orchestration agent that routes user intents to specialized agents, manages an agent registry, and aggregates responses",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@bradygaster/squad-cli": "^0.8.20",
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
