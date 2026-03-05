@@ -55,6 +55,7 @@ var pullIdentityName = take('id-${environmentName}-acr-${take(resourceToken, 6)}
 
 var nihReporterAppName = take('ca-${environmentName}-nih-${take(resourceToken, 4)}', 32)
 var pubmedAppName = take('ca-${environmentName}-pm-${take(resourceToken, 4)}', 32)
+var openalexAppName = take('ca-${environmentName}-oax-${take(resourceToken, 4)}', 32)
 
 // ---------- Shared infrastructure ----------
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -246,6 +247,71 @@ resource pubmedApp 'Microsoft.App/containerApps@2023-05-01' = {
   ]
 }
 
+// ---------- OpenAlex Container App ----------
+resource openalexApp 'Microsoft.App/containerApps@2023-05-01' = {
+  name: openalexAppName
+  location: location
+  tags: union(tags, {
+    'azd-service-name': 'openalex'
+  })
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${pullIdentity.id}': {}
+    }
+  }
+  properties: {
+    managedEnvironmentId: containerAppsEnvironment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: containerPort
+        transport: 'auto'
+      }
+      registries: [
+        {
+          server: containerRegistry.properties.loginServer
+          identity: pullIdentity.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'openalex'
+          image: containerImage
+          env: [
+            {
+              name: 'MCP_TRANSPORT'
+              value: 'streamable-http'
+            }
+            {
+              name: 'HOST'
+              value: '0.0.0.0'
+            }
+            {
+              name: 'PORT'
+              value: string(containerPort)
+            }
+          ]
+          resources: {
+            cpu: json(containerCpu)
+            memory: containerMemory
+          }
+        }
+      ]
+      scale: {
+        minReplicas: minReplicas
+        maxReplicas: maxReplicas
+      }
+    }
+  }
+  dependsOn: [
+    acrPullAssignment
+  ]
+}
+
 // ---------- Outputs ----------
 output AZURE_LOCATION string = location
 output AZURE_RESOURCE_GROUP string = resourceGroup().name
@@ -259,3 +325,6 @@ output SERVICE_NIH_REPORTER_URI string = 'https://${nihReporterApp.properties.co
 
 output SERVICE_PUBMED_NAME string = pubmedApp.name
 output SERVICE_PUBMED_URI string = 'https://${pubmedApp.properties.configuration.ingress.fqdn}'
+
+output SERVICE_OPENALEX_NAME string = openalexApp.name
+output SERVICE_OPENALEX_URI string = 'https://${openalexApp.properties.configuration.ingress.fqdn}'

@@ -20,3 +20,9 @@ services:
     language: python
     docker:
       path: ./Dockerfile
+  openalex:
+    project: ./mcp-openalex
+    host: containerapp
+    language: python
+    docker:
+      path: ./Dockerfile
