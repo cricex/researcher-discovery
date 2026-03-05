@@ -24,6 +24,7 @@ export const ROUTING_RULES: Map<IntentCategory, string[]> = new Map([
       'faculty',
       'specializes in',
       'expert in',
+      'potential',
     ],
   ],
   [

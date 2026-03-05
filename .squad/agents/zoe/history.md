@@ -60,3 +60,15 @@
 - **Results:** All 9 new tests fail as expected (TDD red phase). No regressions to the existing 36 passing tests. Total test count: 55 (36 pass, 19 fail — 10 pre-existing TDD failures + 9 new).
 - **Dependency:** T025-T028 will implement per-agent timeouts, error metadata enrichment, and warning propagation to make these tests pass (green phase)
 - **Wave 2 Phase 4 (2026-03-05T20:58):** T023+T024 error handling and degradation TDD red-phase test suite completed. 4 timeout scenario tests written. 5 degradation & fallback tests written. All 9 tests failing as expected for TDD red phase. Ready for T025 implementation phase to turn tests green. River completed T019 multi-label classifier in parallel; both agents executed without blockers.
+
+### T029/T030/T031 — Citation Traceability TDD Tests (US4)
+- **T029 file:** `tests/aggregator/aggregator.test.ts` — added 3 TDD tests for citation deduplication under new describe block "Citation Deduplication (T029)"
+- **T029 test coverage:** (1) overlapping `gold_researcher_krueger_bruce_k` from 2 agents is deduplicated, (2) deduped array contains each unique citation exactly once, (3) `metadata.citationCount` reflects deduplicated count
+- **T029 results:** Tests 1 & 2 pass (existing `extractCitations()` already deduplicates). Test 3 fails — `metadata.citationCount` not yet populated.
+- **T030 file:** `tests/aggregator/safety-filter.test.ts` — NEW file, 5 TDD tests for `sanitizeRankingLanguage()` and `PROHIBITED_RANKING_WORDS`
+- **T030 test coverage:** (1) "best researcher" flagged/sanitized, (2) "top university" flagged, (3) "leading expert" flagged, (4) clean content passes unchanged, (5) prohibited words list includes all FR-007 words (best, top, leading, foremost, premier, preeminent, renowned, distinguished)
+- **T030 results:** All 5 tests fail at import — `src/orchestrator/aggregator/safety-filter.ts` doesn't exist yet. Expected.
+- **T031 file:** `tests/aggregator/aggregator.test.ts` — added 3 TDD tests under "Uncited Claim Detection (T031)"
+- **T031 test coverage:** (1) uncited factual statements → `citationCoverage < 1.0`, (2) fully-cited response → `citationCoverage: 1.0`, (3) confidence warning added when `citationCoverage < 1.0`
+- **T031 results:** All 3 tests fail — `metadata.citationCoverage` and `warnings` not implemented yet.
+- **Overall results:** 61 tests total, 57 pass, 4 fail. 1 suite fails (safety-filter import). Zero regressions to existing 57 passing tests. All new failures are expected TDD red phase.

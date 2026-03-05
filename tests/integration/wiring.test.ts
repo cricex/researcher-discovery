@@ -5,11 +5,12 @@ import { DefaultAggregator } from "../../src/orchestrator/aggregator/aggregator.
 import { DefaultRouter } from "../../src/orchestrator/router.js";
 import { AgentRegistry } from "../../src/agents/registry.js";
 import { createStubAgent } from "../helpers.js";
+import { IntentCategory } from "../../src/specs/index.js";
 
 describe("Integration: Full Pipeline", () => {
   it("should wire all components and process input end-to-end", async () => {
     const registry = new AgentRegistry();
-    registry.register(createStubAgent({ id: "general-agent" }));
+    registry.register(createStubAgent({ id: "general-agent", categories: [IntentCategory.EXPERTISE_DISCOVERY] }));
 
     const classifier = new DefaultClassifier();
     const router = new DefaultRouter(registry);

@@ -5,6 +5,7 @@ import { DefaultAggregator } from "../../src/orchestrator/aggregator/aggregator.
 import { DefaultRouter } from "../../src/orchestrator/router.js";
 import { AgentRegistry } from "../../src/agents/registry.js";
 import { createStubAgent } from "../helpers.js";
+import { IntentCategory } from "../../src/specs/index.js";
 
 describe("Orchestrator", () => {
   it("should be importable and constructable", () => {
@@ -20,7 +21,7 @@ describe("Orchestrator", () => {
 
   it("should process input through the full pipeline", async () => {
     const registry = new AgentRegistry();
-    registry.register(createStubAgent({ id: "general-1" }));
+    registry.register(createStubAgent({ id: "general-1", categories: [IntentCategory.EXPERTISE_DISCOVERY] }));
 
     const orchestrator = new Orchestrator(
       new DefaultClassifier(),

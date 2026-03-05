@@ -55,6 +55,10 @@ class TestKeywordClassifier implements IntentClassifier {
       parameters: {},
     };
   }
+
+  async classifyMulti(input: string): Promise<ClassifiedIntent[]> {
+    return [await this.classify(input)];
+  }
 }
 
 // ── Mock agent that simulates expertise_discovery HTTP agent ────────────────

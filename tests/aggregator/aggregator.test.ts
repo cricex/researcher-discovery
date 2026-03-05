@@ -6,6 +6,7 @@ import {
   type OrchestrationResult,
   type Citation,
   type AgentErrorEntry,
+  type AggregatedResponse,
 } from "../../src/specs/index.js";
 import {
   createTestIntent,
@@ -432,5 +433,207 @@ describe("DefaultAggregator — Sectioned Aggregation (T018)", () => {
     // Reasoning string should explain what agents were invoked
     expect(typeof result.reasoning).toBe("string");
     expect(result.reasoning.length).toBeGreaterThan(0);
+  });
+});
+
+// ── T029 [US4] — Citation deduplication tests (TDD red phase) ─────────────
+//
+// Verify that overlapping citations from multiple agents are deduplicated
+// at the aggregator level, with correct count metadata.
+
+describe("DefaultAggregator — Citation Deduplication (T029)", () => {
+  const aggregator = new DefaultAggregator();
+  const intent = createTestIntent({
+    category: IntentCategory.EXPERTISE_DISCOVERY,
+    rawInput: "who works on autism neurobiology?",
+  });
+  const context = createTestContext();
+
+  it("should deduplicate overlapping citations from 2 agents", async () => {
+    // Both agents cite gold_researcher_krueger_bruce_k
+    const responses: AgentResponse[] = [
+      {
+        agentId: "expertise_discovery",
+        intentCategory: IntentCategory.EXPERTISE_DISCOVERY,
+        status: "success",
+        content:
+          "Dr. Krueger specializes in autism research <cite>gold_researcher_krueger_bruce_k</cite> and collaborates with Dr. Lee <cite>gold_researcher_lee_anna</cite>",
+        confidence: 0.92,
+      },
+      {
+        agentId: "collaboration_insight",
+        intentCategory: IntentCategory.COLLABORATION_INSIGHT,
+        status: "success",
+        content:
+          "Krueger has co-authored 12 papers with NIH affiliates <cite>gold_researcher_krueger_bruce_k</cite> and published in Nature <cite>openalex_pub_nature_2024</cite>",
+        confidence: 0.87,
+      },
+    ];
+
+    const raw = await aggregator.aggregate(intent, responses, context);
+    const result = raw as unknown as OrchestrationResult;
+
+    expect(result.citations).toBeDefined();
+    expect(Array.isArray(result.citations)).toBe(true);
+
+    // gold_researcher_krueger_bruce_k appears in BOTH agents — must appear only once
+    const kruegerCites = result.citations.filter(
+      (c: Citation) => c.raw === "gold_researcher_krueger_bruce_k",
+    );
+    expect(kruegerCites).toHaveLength(1);
+  });
+
+  it("should contain each unique citation exactly once", async () => {
+    const responses: AgentResponse[] = [
+      {
+        agentId: "expertise_discovery",
+        intentCategory: IntentCategory.EXPERTISE_DISCOVERY,
+        status: "success",
+        content:
+          "<cite>gold_researcher_krueger_bruce_k</cite> <cite>gold_researcher_lee_anna</cite>",
+        confidence: 0.9,
+      },
+      {
+        agentId: "research_output",
+        intentCategory: IntentCategory.RESEARCH_OUTPUT,
+        status: "success",
+        content:
+          "<cite>gold_researcher_krueger_bruce_k</cite> <cite>openalex_pub_asd_2024</cite>",
+        confidence: 0.85,
+      },
+    ];
+
+    const raw = await aggregator.aggregate(intent, responses, context);
+    const result = raw as unknown as OrchestrationResult;
+
+    // 3 unique citations: krueger, lee, pub_asd_2024
+    expect(result.citations).toHaveLength(3);
+
+    const rawValues = result.citations.map((c: Citation) => c.raw);
+    const uniqueRaws = new Set(rawValues);
+    expect(uniqueRaws.size).toBe(rawValues.length); // no duplicates
+    expect(uniqueRaws.size).toBe(3);
+  });
+
+  it("should reflect deduplicated citation count in metadata", async () => {
+    const responses: AgentResponse[] = [
+      {
+        agentId: "expertise_discovery",
+        intentCategory: IntentCategory.EXPERTISE_DISCOVERY,
+        status: "success",
+        content:
+          "<cite>gold_researcher_krueger_bruce_k</cite> <cite>gold_researcher_lee_anna</cite>",
+        confidence: 0.9,
+      },
+      {
+        agentId: "collaboration_insight",
+        intentCategory: IntentCategory.COLLABORATION_INSIGHT,
+        status: "success",
+        content:
+          "<cite>gold_researcher_krueger_bruce_k</cite> <cite>openalex_pub_collab_2024</cite>",
+        confidence: 0.88,
+      },
+    ];
+
+    const raw = await aggregator.aggregate(intent, responses, context);
+    const result = raw as unknown as OrchestrationResult;
+
+    // Metadata should include the deduplicated citation count
+    expect(result.metadata).toBeDefined();
+    expect((result.metadata as Record<string, unknown>).citationCount).toBe(3);
+  });
+});
+
+// ── T031 [US4] — Uncited claim detection tests (TDD red phase) ────────────
+//
+// Verify that the aggregator detects factual statements missing <cite> tags
+// and reports citationCoverage in metadata. These test functionality that
+// doesn't exist yet — they SHOULD fail.
+
+describe("DefaultAggregator — Uncited Claim Detection (T031)", () => {
+  const aggregator = new DefaultAggregator();
+  const intent = createTestIntent({
+    category: IntentCategory.EXPERTISE_DISCOVERY,
+    rawInput: "tell me about autism neurobiology researchers",
+  });
+  const context = createTestContext();
+
+  it("should report citationCoverage below 1.0 when factual statements lack cite tags", async () => {
+    // Mix of cited and uncited factual claims
+    const responses: AgentResponse[] = [
+      {
+        agentId: "expertise_discovery",
+        intentCategory: IntentCategory.EXPERTISE_DISCOVERY,
+        status: "success",
+        content:
+          "Dr. Krueger has published 42 papers on autism neurobiology. " +
+          "He received NIH funding in 2023. " +
+          "His work focuses on synaptic plasticity <cite>gold_researcher_krueger_bruce_k</cite>",
+        confidence: 0.9,
+      },
+    ];
+
+    const raw = await aggregator.aggregate(intent, responses, context);
+    const result = raw as unknown as OrchestrationResult;
+
+    // citationCoverage should exist in metadata and be < 1.0
+    // because "published 42 papers" and "NIH funding in 2023" are uncited
+    const coverage = (result.metadata as Record<string, unknown>).citationCoverage as number;
+    expect(coverage).toBeDefined();
+    expect(typeof coverage).toBe("number");
+    expect(coverage).toBeLessThan(1.0);
+    expect(coverage).toBeGreaterThan(0);
+  });
+
+  it("should report citationCoverage of 1.0 when all factual statements are cited", async () => {
+    // Every factual statement has a citation
+    const responses: AgentResponse[] = [
+      {
+        agentId: "expertise_discovery",
+        intentCategory: IntentCategory.EXPERTISE_DISCOVERY,
+        status: "success",
+        content:
+          "Dr. Krueger specializes in autism neurobiology <cite>gold_researcher_krueger_bruce_k</cite>. " +
+          "Published in Nature Neuroscience <cite>openalex_pub_nature_2024</cite>.",
+        confidence: 0.95,
+      },
+    ];
+
+    const raw = await aggregator.aggregate(intent, responses, context);
+    const result = raw as unknown as OrchestrationResult;
+
+    const coverage = (result.metadata as Record<string, unknown>).citationCoverage as number;
+    expect(coverage).toBeDefined();
+    expect(coverage).toBe(1.0);
+  });
+
+  it("should add a confidence warning when citationCoverage is below 1.0", async () => {
+    const responses: AgentResponse[] = [
+      {
+        agentId: "expertise_discovery",
+        intentCategory: IntentCategory.EXPERTISE_DISCOVERY,
+        status: "success",
+        content:
+          "Dr. Krueger has published 42 papers. " +
+          "He works at Johns Hopkins University. " +
+          "Some of his research is on synaptic plasticity <cite>gold_researcher_krueger_bruce_k</cite>",
+        confidence: 0.9,
+      },
+    ];
+
+    const raw = await aggregator.aggregate(intent, responses, context);
+    const result = raw as unknown as OrchestrationResult;
+
+    // When citationCoverage < 1.0, a warning should be present
+    const warnings = (result as unknown as Record<string, unknown>).warnings as string[];
+    expect(warnings).toBeDefined();
+    expect(Array.isArray(warnings)).toBe(true);
+    expect(
+      warnings.some(
+        (w: string) =>
+          w.toLowerCase().includes("citation") ||
+          w.toLowerCase().includes("uncited"),
+      ),
+    ).toBe(true);
   });
 });

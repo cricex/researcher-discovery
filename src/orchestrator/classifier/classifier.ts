@@ -54,4 +54,44 @@ export class DefaultClassifier implements IntentClassifier {
       parameters: { keywords: bestKeywords },
     };
   }
+
+  async classifyMulti(input: string): Promise<ClassifiedIntent[]> {
+    const lowerInput = input.toLowerCase();
+    const results: ClassifiedIntent[] = [];
+
+    for (const [category, keywords] of ROUTING_RULES) {
+      const matched: string[] = [];
+      let categoryConfidence = 0;
+
+      for (const keyword of keywords) {
+        const lowerKeyword = keyword.toLowerCase();
+        if (lowerInput.includes(lowerKeyword)) {
+          matched.push(keyword);
+          // Word-boundary hit → exact match confidence
+          categoryConfidence = Math.max(categoryConfidence, 0.9);
+        }
+      }
+
+      if (matched.length > 0) {
+        results.push({
+          category,
+          confidence: categoryConfidence,
+          rawInput: input,
+          parameters: { keywords: matched },
+        });
+      }
+    }
+
+    if (results.length === 0) {
+      return [{
+        category: IntentCategory.EXPERTISE_DISCOVERY,
+        confidence: 0.1,
+        rawInput: input,
+        parameters: {},
+      }];
+    }
+
+    results.sort((a, b) => b.confidence - a.confidence);
+    return results;
+  }
 }

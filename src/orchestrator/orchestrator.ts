@@ -20,16 +20,25 @@ import {
   ClassifiedIntent,
   Agent,
 } from '../specs/index.js';
-import type { Citation } from '../specs/response.js';
+import type { AgentErrorEntry, Citation, ResponseStatus } from '../specs/response.js';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 
+export interface OrchestratorOptions {
+  perAgentTimeoutMs?: number;
+}
+
 export class Orchestrator implements OrchestratorPipeline {
+  private readonly perAgentTimeoutMs: number;
+
   constructor(
     private readonly classifier: IntentClassifier,
     private readonly router: IntentRouter,
     private readonly aggregator: ResponseAggregator,
-  ) {}
+    options?: OrchestratorOptions,
+  ) {
+    this.perAgentTimeoutMs = options?.perAgentTimeoutMs ?? 150;
+  }
 
   async process(input: string): Promise<AggregatedResponse> {
     const startTime = performance.now();
@@ -39,84 +48,200 @@ export class Orchestrator implements OrchestratorPipeline {
       timestamp: new Date(),
     };
 
-    // 1. Classify
-    const intent = await this.classifier.classify(input);
+    // 1. Classify — multi-intent: get ALL matching intents
+    const intents = await this.classifier.classifyMulti(input);
+    const primaryIntent = intents[0];
 
-    // 2. Route
-    const agents = await this.router.route(intent);
+    // 2. Route — collect unique agents across all intents, deduplicate by id
+    const agentMap = new Map<string, Agent>();
+    for (const intent of intents) {
+      const matched = await this.router.route(intent);
+      for (const agent of matched) {
+        if (!agentMap.has(agent.id)) {
+          agentMap.set(agent.id, agent);
+        }
+      }
+    }
+    const agents = Array.from(agentMap.values());
 
-    // 3. Dispatch (with per-agent timing)
-    const { responses, agentTimings } = await this.dispatchWithTiming(
-      intent,
-      agents,
-      context,
-    );
+    // 3. Dispatch (with per-agent timing and timeout enforcement)
+    //    Pass primary intent — agents already self-select via canHandle()
+    const { responses, agentTimings, errors, timedOutAgentIds } =
+      await this.dispatchWithTiming(primaryIntent, agents, context);
 
-    // 4. Aggregate
+    // 4. Post-dispatch validation: detect malformed and empty responses
+    const warnings: string[] = [];
+    for (const r of responses) {
+      if (r.status !== 'error' && r.confidence < 0) {
+        errors.push({
+          agentId: r.agentId,
+          errorCode: 'INVALID_RESPONSE',
+          message: `Agent "${r.agentId}" returned an invalid response (negative confidence)`,
+        });
+      }
+      if (r.status === 'success' && r.content === '') {
+        warnings.push(`Agent "${r.agentId}" returned empty results`);
+      }
+    }
+
+    // 5. Determine overall status
+    const failedAgentIds = new Set(errors.map((e) => e.agentId));
+    const totalAgents = agents.length;
+    const failedCount = failedAgentIds.size;
+    let status: ResponseStatus;
+    if (totalAgents === 0 || failedCount === 0) {
+      status = 'success';
+    } else if (failedCount >= totalAgents) {
+      status = 'error';
+    } else {
+      status = 'partial';
+    }
+
+    if (status === 'partial') {
+      warnings.push(
+        `${failedCount} agent(s) failed or were unavailable. Returning partial results.`,
+      );
+    }
+
+    // 6. Aggregate — pass primary intent (aggregator already builds
+    //    sections, citations, confidence from the responses themselves)
     const aggregated = await this.aggregator.aggregate(
-      intent,
+      primaryIntent,
       responses,
       context,
     );
 
-    // 5. Enrich with OrchestrationResult fields
+    // 7. Enrich with OrchestrationResult fields
     const processingTimeMs = Math.round(performance.now() - startTime);
+
+    let reasoning = this.buildReasoning(intents, agents);
+    if (errors.length > 0) {
+      reasoning += ` ${errors.length} agent(s) failed during execution.`;
+    }
+
+    const mergedContent =
+      status === 'error'
+        ? 'All agents failed to respond. Please try again later.'
+        : aggregated.mergedContent;
+
+    // Use aggregator's overallConfidence (average of successful agent
+    // confidences) rather than overriding with classifier confidence.
+    const aggregatedResult = aggregated as unknown as { overallConfidence?: number };
+    const overallConfidence = aggregatedResult.overallConfidence ?? primaryIntent.confidence;
 
     return Object.assign(aggregated, {
       sections: this.buildSections(agents, responses),
       citations: this.extractCitations(responses),
-      overallConfidence: intent.confidence,
-      reasoning: this.buildReasoning(intent, agents),
+      overallConfidence,
+      reasoning,
+      mergedContent,
+      status,
+      errors,
+      warnings,
       metadata: {
         processingTimeMs,
         agentsInvoked: agents.map((a) => a.id),
-        classificationResult: intent,
+        classifiedIntents: intents,
+        classificationResult: primaryIntent,
         agentTimings,
+        timedOutAgents: timedOutAgentIds,
       },
     });
   }
 
   /**
-   * Fan out intent to all matched agents concurrently and record
-   * per-agent wall-clock timing.
+   * Fan out intent to all matched agents concurrently with per-agent
+   * timeout enforcement via AbortController + Promise.race.
    */
   private async dispatchWithTiming(
     intent: ClassifiedIntent,
     agents: Agent[],
     context: ExecutionContext,
-  ): Promise<{ responses: AgentResponse[]; agentTimings: Record<string, number> }> {
+  ): Promise<{
+    responses: AgentResponse[];
+    agentTimings: Record<string, number>;
+    errors: AgentErrorEntry[];
+    timedOutAgentIds: string[];
+  }> {
     const agentTimings: Record<string, number> = {};
+    const errors: AgentErrorEntry[] = [];
+    const timedOutAgentIds: string[] = [];
 
     const results = await Promise.allSettled(
       agents.map(async (agent) => {
         const start = performance.now();
+        const controller = new AbortController();
+        let timeoutId: ReturnType<typeof setTimeout>;
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            controller.abort();
+            reject(
+              new Error(
+                `Agent "${agent.id}" timed out after ${this.perAgentTimeoutMs}ms`,
+              ),
+            );
+          }, this.perAgentTimeoutMs);
+        });
+
         try {
-          const response = await agent.execute(intent, context);
+          const response = await Promise.race([
+            agent.execute(intent, context),
+            timeoutPromise,
+          ]);
+          clearTimeout(timeoutId!);
           agentTimings[agent.id] = Math.round(performance.now() - start);
           return response;
         } catch (error) {
+          clearTimeout(timeoutId!);
           agentTimings[agent.id] = Math.round(performance.now() - start);
           throw error;
         }
       }),
     );
 
-    const responses = results.map((result, i) => {
-      if (result.status === 'fulfilled') return result.value;
-      return {
-        agentId: agents[i].id,
-        intentCategory: intent.category,
-        status: 'error' as const,
-        content: '',
-        confidence: 0,
-        error:
+    const responses: AgentResponse[] = [];
+
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      const agent = agents[i];
+
+      if (result.status === 'fulfilled') {
+        responses.push(result.value);
+      } else {
+        const errorMessage =
           result.reason instanceof Error
             ? result.reason.message
-            : String(result.reason),
-      };
-    });
+            : String(result.reason);
 
-    return { responses, agentTimings };
+        const isTimeout = errorMessage.includes('timed out');
+        if (isTimeout) {
+          timedOutAgentIds.push(agent.id);
+          errors.push({
+            agentId: agent.id,
+            errorCode: 'AGENT_TIMEOUT',
+            message: errorMessage,
+          });
+        } else {
+          errors.push({
+            agentId: agent.id,
+            errorCode: 'INTERNAL_ERROR',
+            message: errorMessage,
+          });
+        }
+
+        responses.push({
+          agentId: agent.id,
+          intentCategory: intent.category,
+          status: 'error',
+          content: '',
+          confidence: 0,
+          error: errorMessage,
+        });
+      }
+    }
+
+    return { responses, agentTimings, errors, timedOutAgentIds };
   }
 
   /** Map each successful response to a section keyed by agent name. */
@@ -194,11 +319,18 @@ export class Orchestrator implements OrchestratorPipeline {
   }
 
   /** Produce a human-readable explanation of the routing decision. */
-  private buildReasoning(intent: ClassifiedIntent, agents: Agent[]): string {
+  private buildReasoning(intents: ClassifiedIntent[], agents: Agent[]): string {
     if (agents.length === 0) {
-      return `No agents matched intent category '${intent.category}'.`;
+      const categories = intents.map((i) => i.category).join(', ');
+      return `No agents matched intent category '${categories}'.`;
     }
     const names = agents.map((a) => a.name).join(', ');
-    return `Classified as '${intent.category}' (confidence: ${intent.confidence}). Routed to: ${names}.`;
+    if (intents.length === 1) {
+      const intent = intents[0];
+      return `Classified as '${intent.category}' (confidence: ${intent.confidence}). Routed to: ${names}.`;
+    }
+    // Multi-intent: list all detected categories
+    const categories = intents.map((i) => `${i.category} (${i.confidence})`).join(', ');
+    return `Detected ${intents.length} intents: ${categories}. Routed to: ${names}.`;
   }
 }

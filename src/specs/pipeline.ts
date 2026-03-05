@@ -13,6 +13,7 @@ import { AgentResponse, AggregatedResponse } from './response.js';
 /** Classifier: raw input → typed intent */
 export interface IntentClassifier {
   classify(input: string): Promise<ClassifiedIntent>;
+  classifyMulti(input: string): Promise<ClassifiedIntent[]>;
 }
 
 /** Router: intent → matching agents */
