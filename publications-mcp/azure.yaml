@@ -1,0 +1,22 @@
+name: researcher-discovery
+metadata:
+  template: researcher-discovery-aca@0.0.1-beta
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  nih-reporter:
+    project: ./mcp-nih-reporter
+    host: containerapp
+    language: python
+    docker:
+      path: ./Dockerfile
+  pubmed:
+    project: ./mcp-pubmed
+    host: containerapp
+    language: python
+    docker:
+      path: ./Dockerfile

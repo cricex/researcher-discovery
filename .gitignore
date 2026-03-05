@@ -1,0 +1,11 @@
+# Azure Developer CLI
+.azure/
+
+# Python
+__pycache__/
+*.py[oc]
+.venv/
+.env*
+
+# Logs
+*.log
