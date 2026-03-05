@@ -2,3 +2,5 @@
 .squad/orchestration-log/
 .squad/log/
 node_modules/
+venv/
+__pycache__/
