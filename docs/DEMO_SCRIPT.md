@@ -4,6 +4,8 @@
 
 This document provides step-by-step instructions for demonstrating the Team 4 Orchestration Agent system. The demo is designed for a 6-minute presentation showcasing how the system routes complex research queries to specialized agents and synthesizes coherent responses.
 
+> **Implementation Status:** Complete — 71/71 tests passing. The pipeline implements multi-intent classification, per-agent timeouts (AbortController), citation coverage scoring, FR-007 safety filtering, and structured JSON logging.
+
 ---
 
 ## Pre-Demo Setup Checklist
@@ -99,9 +101,10 @@ No single database or team can answer all three questions. She'd normally spend 
 **Key Points to Highlight:**
 
 1. **Single Entry Point:** The user writes one query in natural language
-2. **Intent Classification:** The orchestrator understands what the query is asking for
-3. **Parallel Dispatch:** Instead of calling agents sequentially, all three are called at the same time
-4. **Response Synthesis:** Results are merged into one coherent, cited response
+2. **Multi-Intent Classification:** `classifyMulti()` detects all matching intent categories (e.g., expertise + collaboration + compliance from a single query)
+3. **Parallel Dispatch:** All matched agents are called concurrently via `Promise.allSettled` with per-agent `AbortController` timeouts
+4. **Response Synthesis:** Results are merged into one coherent, cited response with safety-filtered content
+5. **Citation Coverage:** The aggregator scores citation coverage and warns about uncited factual claims
 
 **Time:** 1 minute
 
@@ -165,10 +168,13 @@ Summarize potential collaborators, funding opportunities, and compliance steps f
 
 **Key Technical Points:**
 
-- **WebSocket Support:** The demo showed real-time status updates. Behind the scenes, the orchestrator sends WebSocket events as each stage completes
-- **Graceful Failure:** If one agent times out, the others' results are still returned
+- **Multi-Intent:** `classifyMulti()` detects all matching categories — a single query can trigger expertise, research, and policy agents simultaneously
+- **Per-Agent Timeouts:** Each agent gets an `AbortController` with a configurable timeout (150ms test / 5000ms prod). Timed-out agents are recorded in `metadata.timedOutAgents`
+- **Graceful Failure:** If one agent times out, others' results are still returned with `status: 'partial'`
 - **Concurrent Processing:** Uses `Promise.allSettled` to fan out to agents and wait for all to complete
-- **Citation Integrity:** Each result is tagged with its source; citations are verified before returning
+- **Citation Pipeline:** Citations extracted from `<cite>` tags, JSON content, and metadata. Coverage scored as cited/total factual sentences. Uncited claims generate warnings
+- **Safety Filter (FR-007):** Ranking language (`best`, `top`, `leading`, etc.) is automatically neutralized before aggregation
+- **Structured Logging:** Every pipeline stage emits JSON log events with `requestId` for correlation
 
 **Optional: Show Code**
 
@@ -291,6 +297,6 @@ npm run dev:backend
 ## Post-Demo Notes
 
 - **Duration:** Actual demo runs 5-7 minutes depending on agent response times
-- **Confidence:** This demo showcases core orchestration logic. Advanced features (filtering, ranked results, explanation generation) are in development
+- **Confidence:** This demo showcases the complete orchestration pipeline: multi-intent classification, parallel dispatch with timeouts, citation coverage scoring, and FR-007 safety filtering. All 71 tests pass.
 - **Next Steps for Teams 1-3:** Integration documentation is in `docs/INTEGRATION_GUIDE.md`
 - **Questions:** Reach out to Sean Gayle (#team4-orchestration on Slack)

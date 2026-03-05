@@ -62,6 +62,12 @@ export interface OrchestrationResult {
     processingTimeMs: number;
     /** IDs of agents that were invoked for this request */
     agentsInvoked: string[];
+    /** Total number of citations collected across all agent responses */
+    citationCount?: number;
+    /** Ratio of sections with at least one citation, 0–1 */
+    citationCoverage?: number;
+    /** Safety filter violations detected and sanitized */
+    safetyViolations?: string[];
   };
 }
 

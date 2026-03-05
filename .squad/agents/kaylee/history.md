@@ -33,6 +33,8 @@
 
 - **T020–T022 DELIVERED:** Multi-intent dispatch pipeline wired into orchestrator. Primary-intent routing with agent deduplication. Aggregator confidence ownership. Metadata enriched with all classified intents. Test mock updates complete. 62/62 target tests green. Zero blockers for citation/safety work.
 
+- **T038 Documentation update:** Rewrote `docs/orchestration-agent-spec.md` from aspirational design spec to implementation-accurate technical documentation. Covers all 8 required sections: Getting Started, Architecture (4-stage pipeline, IntentCategory enum, agent endpoints), Routing Rules (keyword→category mapping), Multi-Intent (classifyMulti, agent dedup), Error Handling (AbortController timeouts, graceful degradation, status determination), Citation Pipeline (extraction, coverage scoring, uncited warnings), Safety Filter (FR-007 prohibited words, sanitizeRankingLanguage), Structured Logging (JSON events per pipeline stage). Updated `docs/INTEGRATION_GUIDE.md` with timeout mechanism details, safety filter notice, and citation format requirements. Updated `docs/DEMO_SCRIPT.md` technical deep-dive section with final feature set. All 71 tests still green.
+
 ### Wave 4 Completion (2026-03-05T21:30:00Z)
 
 - **T032–T033+T035 DELIVERED:** Citation pipeline complete. T032 implements `metadata.citationCount` from deduplicated citations. T033 adds `calculateCitationCoverage()` scoring percentage of factual sentences with citations, generates "uncited-claim" warnings when coverage < 1.0. T035 integrates `sanitizeRankingLanguage` safety filter into aggregation pipeline, collecting violations into `metadata.safetyViolations` and logging via `console.warn` for audit trail. All 71 tests green, 0 failures. Citation traceability end-to-end complete.

@@ -4,6 +4,8 @@
 
 This guide is for Teams 1, 2, and 3 integrating their specialized agents with the Team 4 Orchestration Agent. The orchestrator routes user intents to your agent via a standardized HTTP contract.
 
+> **Implementation Status:** Complete — all 71 tests pass. The orchestrator implements a 4-stage pipeline (classify → route → dispatch → aggregate) with multi-intent support, per-agent timeouts, citation coverage scoring, and FR-007 safety filtering. See `docs/orchestration-agent-spec.md` for full technical docs.
+
 ---
 
 ## Agent Contract
@@ -151,10 +153,19 @@ The orchestrator will call this endpoint to verify your agent is responsive befo
 
 ## Performance Requirements
 
-- **Maximum Response Time:** 5 seconds per query
-- **Graceful Timeout Handling:** If a query will take longer than 5 seconds, return partial results or a graceful error
-- **Concurrent Request Support:** Be prepared to handle multiple simultaneous requests
+- **Per-Agent Timeout:** 5 seconds (production default via `AgentEndpointConfig.timeoutMs`; 150ms in tests)
+- **Timeout Mechanism:** `AbortController` + `Promise.race` per agent call. If your agent exceeds the timeout, the orchestrator cancels the call and records an `AGENT_TIMEOUT` error.
+- **Graceful Degradation:** If your agent fails or times out, the orchestrator still returns results from other agents with `status: 'partial'`.
+- **Concurrent Request Support:** The orchestrator dispatches to all matched agents in parallel via `Promise.allSettled`. Be prepared to handle concurrent requests.
 - **Uptime Target:** 99% availability (health check failures trigger orchestrator fallback)
+
+### Safety Filter (FR-007)
+
+The orchestrator's aggregator runs a safety filter on all agent content before returning results. Prohibited ranking/superlative words (`best`, `top`, `leading`, `foremost`, `premier`, `preeminent`, `renowned`, `distinguished`) used as adjectives are automatically neutralized. See the [spec](./orchestration-agent-spec.md#7-safety-filter) for details.
+
+### Citation Requirements
+
+Agent responses should include citations in `<cite>sourceType_sourceId</cite>` format. The orchestrator extracts citations from three sources: `<cite>` tags in content, `citations` arrays in JSON content, and `metadata.citations` arrays. Citation coverage is scored and uncited factual claims generate warnings.
 
 ---
 
@@ -165,10 +176,11 @@ Before going live, verify:
 - [ ] Health endpoint responds with 200 OK
 - [ ] POST endpoint accepts the contract request format
 - [ ] Response includes all required fields
-- [ ] All responses include citations
+- [ ] All responses include citations in `<cite>sourceType_sourceId</cite>` format
 - [ ] Error handling returns proper error codes
 - [ ] Processing time is < 5 seconds under normal load
 - [ ] Concurrent requests are handled correctly
+- [ ] No prohibited ranking/superlative language in responses (FR-007)
 
 **Test your agent locally:**
 
