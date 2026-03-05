@@ -73,6 +73,13 @@
 - **T031 results:** All 3 tests fail — `metadata.citationCoverage` and `warnings` not implemented yet.
 - **Overall results:** 61 tests total, 57 pass, 4 fail. 1 suite fails (safety-filter import). Zero regressions to existing 57 passing tests. All new failures are expected TDD red phase.
 
+### T040 — Performance Validation Tests (2026-03-05)
+- **File:** `tests/integration/performance.test.ts` — 5 tests validating pipeline timing budgets
+- **Test coverage:** (1) single-agent query completes in <3s, (2) multi-agent query (3 agents) completes in <5s, (3) pipeline stages (classify → route → dispatch → aggregate) each complete within 2s budget, (4) concurrent dispatch is faster than sequential execution, (5) per-agent timing metadata is recorded
+- **Approach:** `createLatencyAgent()` factory creates stub agents with 50ms simulated latency via `setTimeout`. Latency is well under the 150ms `perAgentTimeoutMs` default so agents always succeed. A `PerfTestClassifier` provides deterministic classification.
+- **Key assertion:** Concurrent dispatch of 3 × 50ms agents completes in under 2× sequential time (300ms), proving `Promise.allSettled` fan-out works correctly
+- **Results:** All 5 tests pass. 71 total tests (67 pass, 4 fail — all pre-existing TDD red phase). Zero regressions.
+
 ### Wave 3 Completion (2026-03-05T21:00:00Z)
 
 - **T029–T031 DELIVERED:** Citation deduplication tests (T029) with 2 of 3 passing. FR-007 safety filter TDD tests (T030) all 5 written, awaiting River's implementation. Uncited claim detection tests (T031) all 3 written, awaiting metadata enrichment. 11 new tests written. 57/61 tests passing. Ready for green-phase implementation handoff.
