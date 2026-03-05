@@ -94,3 +94,59 @@ Extended `src/specs/response.ts` with new interfaces:
 ### Rationale
 
 These interfaces support the Response Aggregator component and orchestration result shape. String errorCode allows flexibility in error classification across agent boundaries.
+
+---
+
+## Decision 2.1: snake_case mapping lives in HttpAgentClient, not in contract types
+
+**Author:** Kaylee  
+**Date:** 2026-03-05  
+**Status:** Accepted  
+**Task:** T005
+
+### Context
+
+The agent contract spec defines the HTTP wire format in snake_case (`query_timestamp`, `processing_time_ms`, `result_count`, etc.), but our TypeScript types in `src/specs/agent-contract.ts` use camelCase. Something has to bridge the two.
+
+### Decision
+
+The mapping between camelCase TypeScript types and snake_case wire format is handled **entirely inside `HttpAgentClient`** (`src/agents/client.ts`) via private helper functions (`toWireRequest`, `fromWireResponse`, `fromWireError`). The contract types themselves stay pure camelCase — no dual representations, no `@JsonProperty` annotations, no generic key-mapping utility.
+
+### Why
+
+- **Single responsibility:** The HTTP client is the only place that touches the wire format, so that's where the mapping belongs.
+- **Type safety:** Explicit field-by-field mapping catches schema drift at compile time. A generic `camelToSnake()` utility would silently pass unknown fields and miss renames.
+- **Testability:** The mapper functions are pure and easy to unit-test in isolation.
+
+### Trade-offs
+
+- If the wire format adds fields, the mapper functions need manual updates. This is intentional — we *want* to review new fields rather than auto-pass them.
+
+---
+
+## Decision 2.2: Expanded Test Helper Factories
+
+**Author:** Zoe (Tester / DevOps)  
+**Date:** 2026-03-05  
+**Status:** Accepted  
+**Task:** T007
+
+### Context
+
+With the agent-contract types (`AgentRequest`, `AgentContractResponse`) now in specs, tests need factories for these shapes. The HTTP agent integration layer is coming, and test setup for it shouldn't require inlining large object literals in every test.
+
+### Decision
+
+Added three new factories to `tests/helpers.ts`:
+
+1. **`createMockAgentResponse()`** — returns a valid `AgentContractResponse` with a citations array. Useful for testing aggregation, response parsing, and HTTP agent stubs.
+2. **`createMockAgentRequest()`** — returns a valid `AgentRequest`. Useful for testing request validation and HTTP client layers.
+3. **`createStubHttpAgent()`** — returns a mock object with `query()` and `healthCheck()` methods matching the expected HTTP agent shape. Configurable `baseUrl`, `agentId`, and `timeout`.
+
+Also updated `createTestIntent()` default category from `GENERAL` to `EXPERTISE_DISCOVERY` to reflect the new research domain taxonomy.
+
+### Rationale
+
+- Centralized factories prevent copy-paste drift across test files
+- `createStubHttpAgent()` gives a ready-made stub without needing a real HTTP server or heavy mocking library
+- Defaulting to EXPERTISE_DISCOVERY instead of GENERAL catches more routing edge cases in tests
