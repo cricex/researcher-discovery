@@ -6,13 +6,10 @@
  */
 
 export enum IntentCategory {
-  CODE_GENERATION = 'code_generation',
-  CODE_REVIEW = 'code_review',
-  EXPLANATION = 'explanation',
-  REFACTOR = 'refactor',
-  TEST_GENERATION = 'test_generation',
-  DOCUMENTATION = 'documentation',
-  DEBUGGING = 'debugging',
+  EXPERTISE_DISCOVERY = 'expertise_discovery',
+  RESEARCH_OUTPUT = 'research_output',
+  COLLABORATION_INSIGHT = 'collaboration_insight',
+  POLICY_COMPLIANCE = 'policy_compliance',
   GENERAL = 'general',
 }
 
@@ -26,4 +23,10 @@ export interface ClassifiedIntent {
   /** Extracted parameters (e.g., target file, language, scope) */
   parameters: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** Optional context for enriching downstream routing and agent execution */
+  context?: {
+    goldenRecordIds?: string[];
+    keywords?: string[];
+    sessionId?: string;
+  };
 }

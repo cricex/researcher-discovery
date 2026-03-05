@@ -37,15 +37,15 @@ describe("AgentRegistry", () => {
   it("should find agents that match an intent", () => {
     const registry = new AgentRegistry();
     registry.register(
-      createStubAgent({ id: "coder", categories: [IntentCategory.CODE_GENERATION] }),
+      createStubAgent({ id: "researcher", categories: [IntentCategory.EXPERTISE_DISCOVERY] }),
     );
     registry.register(
-      createStubAgent({ id: "explainer", categories: [IntentCategory.EXPLANATION] }),
+      createStubAgent({ id: "collaborator", categories: [IntentCategory.COLLABORATION_INSIGHT] }),
     );
 
-    const intent = createTestIntent({ category: IntentCategory.CODE_GENERATION });
+    const intent = createTestIntent({ category: IntentCategory.EXPERTISE_DISCOVERY });
     const matches = registry.findForIntent(intent);
     expect(matches).toHaveLength(1);
-    expect(matches[0].id).toBe("coder");
+    expect(matches[0].id).toBe("researcher");
   });
 });

@@ -42,3 +42,10 @@
 - **Key pattern:** Mock `globalThis.fetch` with `vi.fn()` for HTTP testing — no need for real servers or extra deps. Restore in `afterEach` to avoid test bleed.
 - **Test totals after T011/T012:** 29 tests (22 pass, 7 fail). 5 pre-existing TDD failures in `classifier.test.ts`, 2 new expected TDD failures in `single-agent.test.ts`. Zero regressions.
 - **Wave 1 Cross-Team (2026-03-05T20:30):** T011 integration tests (red phase) pair with River's T010 classifier tests. T012 contract tests validate Kaylee's HttpAgentClient from Phase 2. Both tests use expanded factory helpers (createMockAgentResponse, createMockAgentRequest, createStubHttpAgent) in `tests/helpers.ts`. Zoe's tests enable Mal's B6/B7 demo script scenario validation. All wave 1 tests integrated with 11 new test cases across TDD red phase.
+
+### T018 — Sectioned Aggregation TDD Tests (US2)
+- **File:** `tests/aggregator/aggregator.test.ts` — added 9 new TDD red-phase tests for `DefaultAggregator` sectioned aggregation
+- **Test coverage:** (1) single agent → single section, (2) multiple agents → grouped sections with agentsInvoked metadata, (3) citation deduplication across agents, (4) empty response graceful handling, (5) mixed empty/non-empty responses, (6) mixed success/error with error entries, (7) confidence weighted average, (8) error agents excluded from confidence, (9) metadata merging with timing and reasoning
+- **Pattern:** Tests cast `AggregatedResponse` to `OrchestrationResult` to assert the enriched shape (sections Map, citations[], overallConfidence, reasoning, metadata.processingTimeMs, metadata.agentsInvoked) — same pattern as T011 integration tests
+- **Results:** 3 existing tests pass, all 9 new tests fail as expected (stub aggregator returns `AggregatedResponse` without sections/citations/confidence/metadata). Zero regressions.
+- **Dependency:** T021/T022 will implement sectioned aggregation in `DefaultAggregator` to make these tests pass (green phase)

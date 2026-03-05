@@ -9,6 +9,8 @@ import {
   type Agent,
   type AgentCapability,
   type AgentResponse,
+  type AgentRequest,
+  type AgentContractResponse,
   type ClassifiedIntent,
   type ExecutionContext,
   IntentCategory,
@@ -54,7 +56,7 @@ export function createTestIntent(
   overrides: Partial<ClassifiedIntent> = {},
 ): ClassifiedIntent {
   return {
-    category: overrides.category ?? IntentCategory.GENERAL,
+    category: overrides.category ?? IntentCategory.EXPERTISE_DISCOVERY,
     confidence: overrides.confidence ?? 0.8,
     rawInput: overrides.rawInput ?? "test input",
     parameters: overrides.parameters ?? {},
@@ -68,5 +70,50 @@ export function createTestContext(
   return {
     requestId: overrides.requestId ?? "test-request-id",
     timestamp: overrides.timestamp ?? new Date("2025-01-01T00:00:00Z"),
+  };
+}
+
+/** Creates a mock AgentContractResponse for testing HTTP agent responses. */
+export function createMockAgentResponse(
+  overrides: Partial<AgentContractResponse> = {},
+): AgentContractResponse {
+  return {
+    agent: overrides.agent ?? "test-agent",
+    queryTimestamp: overrides.queryTimestamp ?? new Date().toISOString(),
+    results: overrides.results ?? { summary: "mock result" },
+    citations: overrides.citations ?? ["https://example.com/source-1"],
+    metadata: overrides.metadata,
+  };
+}
+
+/** Creates a mock AgentRequest for testing HTTP agent requests. */
+export function createMockAgentRequest(
+  overrides: Partial<AgentRequest> = {},
+): AgentRequest {
+  return {
+    query: overrides.query ?? "test query",
+    context: overrides.context,
+    options: overrides.options,
+  };
+}
+
+/** Creates a stub HTTP agent for testing — a simple object with the expected shape. */
+export function createStubHttpAgent(
+  overrides: { baseUrl?: string; agentId?: string; timeout?: number } = {},
+) {
+  const agentId = overrides.agentId ?? "http-test-agent";
+  const baseUrl = overrides.baseUrl ?? "http://localhost:3000";
+  const timeout = overrides.timeout ?? 5000;
+
+  return {
+    agentId,
+    baseUrl,
+    timeout,
+    async query(request: AgentRequest): Promise<AgentContractResponse> {
+      return createMockAgentResponse({ agent: agentId });
+    },
+    async healthCheck(): Promise<{ status: "healthy" | "unhealthy" }> {
+      return { status: "healthy" };
+    },
   };
 }

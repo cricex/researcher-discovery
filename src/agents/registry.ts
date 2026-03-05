@@ -6,6 +6,10 @@
  */
 
 import { Agent, ClassifiedIntent } from '../specs/index.js';
+import type { AgentEndpointConfig } from './endpoints.js';
+import { DEFAULT_AGENT_ENDPOINTS } from './endpoints.js';
+import { HttpAgentClient } from './client.js';
+import { HttpAgent } from './http-agent.js';
 
 export class AgentRegistry {
   private agents = new Map<string, Agent>();
@@ -40,5 +44,33 @@ export class AgentRegistry {
 
   get size(): number {
     return this.agents.size;
+  }
+
+  /**
+   * Convenience method — create an `HttpAgent` from an endpoint config
+   * and register it in a single call.
+   *
+   * @param config - Endpoint configuration for the agent.
+   * @param client - Optional HTTP client; a default instance is created if omitted.
+   */
+  registerEndpoint(
+    config: AgentEndpointConfig,
+    client?: HttpAgentClient,
+  ): void {
+    const httpClient = client ?? new HttpAgentClient();
+    this.register(new HttpAgent(config, httpClient));
+  }
+
+  /**
+   * Register all agents defined in `DEFAULT_AGENT_ENDPOINTS`.
+   * Skips any agent that is already registered.
+   */
+  registerDefaults(): void {
+    const client = new HttpAgentClient();
+    for (const config of DEFAULT_AGENT_ENDPOINTS.values()) {
+      if (!this.agents.has(config.id)) {
+        this.register(new HttpAgent(config, client));
+      }
+    }
   }
 }

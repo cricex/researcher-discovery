@@ -17,6 +17,7 @@ from semantic_kernel.connectors.ai.anthropic import AnthropicChatCompletion
 
 # Internal imports
 from orchestrator.aggregator import ResponseAggregator
+from orchestrator.router import IntentRouter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,6 +86,9 @@ class Orchestrator:
         # Response aggregator
         self.aggregator = ResponseAggregator()
 
+        # Intent router
+        self.router = IntentRouter()
+
         # Citation tracking
         self.citations = []
 
@@ -132,13 +136,19 @@ class Orchestrator:
                 )
             }
 
-    async def route_query(self, user_query: str, context: Dict = None) -> OrchestrationResult:
+    async def route_query(
+        self,
+        user_query: str,
+        context: Dict = None,
+        conversation_history: List[Dict] = None,
+    ) -> OrchestrationResult:
         """
         Main orchestration method: classify intent, route to agents, aggregate.
 
         Args:
             user_query: Natural language query from user
             context: Optional context from enrichment layer
+            conversation_history: Previous turns for multi-turn detection
 
         Returns:
             OrchestrationResult with aggregated response
@@ -147,12 +157,12 @@ class Orchestrator:
 
         start_time = datetime.now()
 
-        # Step 1: Classify intent
-        intents = self._classify_intent(user_query)
-        logger.info(f"   Classified intents: {intents}")
+        # Step 1: Route via IntentRouter (classify + multi-turn + agent selection)
+        routing = self.router.route(user_query, context, conversation_history)
+        logger.info(f"   {routing.reasoning}")
 
-        # Step 2: Route to appropriate agents
-        agent_calls = self._determine_agent_calls(intents)
+        # Step 2: Resolve agent names to endpoints
+        agent_calls = self._resolve_agent_endpoints(routing.agents)
         logger.info(f"   Calling agents: {[a.name for a in agent_calls]}")
 
         # Step 3: Execute agent calls in parallel
@@ -169,81 +179,31 @@ class Orchestrator:
             response=response_text,
             agents_invoked=[a.name for a in agent_calls],
             citations=aggregated.citations,
-            confidence=aggregated.confidence,
-            reasoning=f"Called {len(agent_responses)} agent(s). "
-                      f"{len(aggregated.agents_used)} responded successfully.",
+            confidence=routing.intent_result.confidence * aggregated.confidence,
+            reasoning=routing.reasoning,
             metadata={
                 **aggregated.metadata,
                 "processing_time_ms": processing_time,
                 "agents_called": len(agent_calls),
+                "intent_primary": routing.intent_result.primary_intent,
+                "intent_confidence": routing.intent_result.confidence,
+                "is_multi_turn": routing.is_multi_turn,
+                "keywords_matched": routing.intent_result.keywords_matched,
             }
         )
 
         logger.info(f"✅ Orchestration complete in {processing_time:.0f}ms")
         return result
 
-    def _classify_intent(self, query: str) -> List[str]:
-        """Classify query intent to determine which agents to call."""
-        query_lower = query.lower()
-        intents = []
-
-        # Expertise discovery patterns
-        if any(term in query_lower for term in
-               ["who works on", "expertise", "researcher", "faculty", "who at"]):
-            intents.append("expertise_discovery")
-
-        # Research output patterns
-        if any(term in query_lower for term in
-               ["publication", "paper", "research output", "published"]):
-            intents.append("research_output")
-
-        # Funding/grants patterns
-        if any(term in query_lower for term in
-               ["grant", "funding", "nih", "award", "r01"]):
-            intents.append("funding_discovery")
-
-        # Collaboration patterns
-        if any(term in query_lower for term in
-               ["collaborate", "team", "partner", "work with"]):
-            intents.append("collaboration_insight")
-
-        # Policy patterns
-        if any(term in query_lower for term in
-               ["policy", "compliance", "irb", "coi", "requirement", "disclosure"]):
-            intents.append("policy_compliance")
-
-        # Default to expertise if no clear intent
-        if not intents:
-            intents.append("expertise_discovery")
-
-        return intents
-
-    def _determine_agent_calls(self, intents: List[str]) -> List[AgentEndpoint]:
-        """Map intents to agent endpoints."""
-        agents = []
-
-        for intent in intents:
-            if intent == "expertise_discovery" and "expertise_discovery" in self.agent_registry:
-                agents.append(self.agent_registry["expertise_discovery"])
-
-            elif intent in ["research_output", "funding_discovery"] and "research_output" in self.agent_registry:
-                agents.append(self.agent_registry["research_output"])
-
-            elif intent == "collaboration_insight" and "collaboration_insight" in self.agent_registry:
-                agents.append(self.agent_registry["collaboration_insight"])
-
-            elif intent == "policy_compliance" and "policy_compliance" in self.agent_registry:
-                agents.append(self.agent_registry["policy_compliance"])
-
-        # Deduplicate
-        seen = set()
-        unique_agents = []
-        for agent in agents:
-            if agent.name not in seen:
-                seen.add(agent.name)
-                unique_agents.append(agent)
-
-        return unique_agents
+    def _resolve_agent_endpoints(self, agent_names: List[str]) -> List[AgentEndpoint]:
+        """Map router-selected agent names to registered endpoints."""
+        endpoints = []
+        for name in agent_names:
+            if name in self.agent_registry:
+                endpoints.append(self.agent_registry[name])
+            else:
+                logger.warning(f"Agent '{name}' not found in registry, skipping")
+        return endpoints
 
     async def _call_agents_parallel(self, agents: List[AgentEndpoint],
                                      query: str, context: Dict = None) -> Dict[str, Dict]:
