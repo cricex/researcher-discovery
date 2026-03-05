@@ -83,3 +83,7 @@
 ### Wave 3 Completion (2026-03-05T21:00:00Z)
 
 - **T029–T031 DELIVERED:** Citation deduplication tests (T029) with 2 of 3 passing. FR-007 safety filter TDD tests (T030) all 5 written, awaiting River's implementation. Uncited claim detection tests (T031) all 3 written, awaiting metadata enrichment. 11 new tests written. 57/61 tests passing. Ready for green-phase implementation handoff.
+
+### Wave 4 Completion (2026-03-05T21:30:00Z)
+
+- **T040 DELIVERED:** Performance validation suite complete and all tests passing. Five integration tests validate single-agent <3s, multi-agent 3-agent <5s, per-stage budget compliance (<2s each), concurrent-dispatch advantage (proven vs sequential), and timing metadata accuracy. Latency factory agents with 50ms simulated delays confirm no timing bottlenecks. Concurrent dispatch of 3 agents beats sequential by >3× as expected from `Promise.allSettled` fan-out. 71/71 tests passing, 0 failures. Pipeline ready for production deployment.

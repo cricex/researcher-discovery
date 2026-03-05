@@ -32,3 +32,7 @@
 ### Wave 3 Completion (2026-03-05T21:00:00Z)
 
 - **T020–T022 DELIVERED:** Multi-intent dispatch pipeline wired into orchestrator. Primary-intent routing with agent deduplication. Aggregator confidence ownership. Metadata enriched with all classified intents. Test mock updates complete. 62/62 target tests green. Zero blockers for citation/safety work.
+
+### Wave 4 Completion (2026-03-05T21:30:00Z)
+
+- **T032–T033+T035 DELIVERED:** Citation pipeline complete. T032 implements `metadata.citationCount` from deduplicated citations. T033 adds `calculateCitationCoverage()` scoring percentage of factual sentences with citations, generates "uncited-claim" warnings when coverage < 1.0. T035 integrates `sanitizeRankingLanguage` safety filter into aggregation pipeline, collecting violations into `metadata.safetyViolations` and logging via `console.warn` for audit trail. All 71 tests green, 0 failures. Citation traceability end-to-end complete.
