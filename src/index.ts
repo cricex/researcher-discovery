@@ -15,3 +15,6 @@ export { DefaultRouter } from './orchestrator/router.js';
 
 // Agent registry
 export { AgentRegistry } from './agents/index.js';
+
+// UI formatting utilities
+export { formatOrchestrationResult, formatQuerySummary } from './ui/index.js';

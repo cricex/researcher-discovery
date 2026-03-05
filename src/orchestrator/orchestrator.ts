@@ -52,6 +52,15 @@ export class Orchestrator implements OrchestratorPipeline {
     const intents = await this.classifier.classifyMulti(input);
     const primaryIntent = intents[0];
 
+    console.info(JSON.stringify({
+      event: 'classify',
+      requestId: context.requestId,
+      primaryCategory: primaryIntent.category,
+      primaryConfidence: primaryIntent.confidence,
+      intentsCount: intents.length,
+      keywordsMatched: primaryIntent.parameters?.keywords ?? [],
+    }));
+
     // 2. Route — collect unique agents across all intents, deduplicate by id
     const agentMap = new Map<string, Agent>();
     for (const intent of intents) {
@@ -64,10 +73,30 @@ export class Orchestrator implements OrchestratorPipeline {
     }
     const agents = Array.from(agentMap.values());
 
+    console.info(JSON.stringify({
+      event: 'route',
+      requestId: context.requestId,
+      agentsMatched: agents.map(a => a.name),
+      agentCount: agents.length,
+    }));
+
     // 3. Dispatch (with per-agent timing and timeout enforcement)
     //    Pass primary intent — agents already self-select via canHandle()
     const { responses, agentTimings, errors, timedOutAgentIds } =
       await this.dispatchWithTiming(primaryIntent, agents, context);
+
+    for (const agent of agents) {
+      const durationMs = agentTimings[agent.id] ?? null;
+      const agentError = errors.find(e => e.agentId === agent.id);
+      console.info(JSON.stringify({
+        event: 'dispatch',
+        requestId: context.requestId,
+        agentId: agent.id,
+        durationMs,
+        success: !agentError,
+        errorCode: agentError?.errorCode ?? null,
+      }));
+    }
 
     // 4. Post-dispatch validation: detect malformed and empty responses
     const warnings: string[] = [];
@@ -129,9 +158,22 @@ export class Orchestrator implements OrchestratorPipeline {
     const aggregatedResult = aggregated as unknown as { overallConfidence?: number };
     const overallConfidence = aggregatedResult.overallConfidence ?? primaryIntent.confidence;
 
+    const sectionsMap = this.buildSections(agents, responses);
+    const citationsList = this.extractCitations(responses);
+
+    console.info(JSON.stringify({
+      event: 'aggregate',
+      requestId: context.requestId,
+      sectionsCount: sectionsMap.size,
+      citationCount: citationsList.length,
+      overallConfidence,
+      status,
+      processingTimeMs,
+    }));
+
     return Object.assign(aggregated, {
-      sections: this.buildSections(agents, responses),
-      citations: this.extractCitations(responses),
+      sections: sectionsMap,
+      citations: citationsList,
       overallConfidence,
       reasoning,
       mergedContent,

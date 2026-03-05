@@ -72,3 +72,7 @@
 - **T031 test coverage:** (1) uncited factual statements → `citationCoverage < 1.0`, (2) fully-cited response → `citationCoverage: 1.0`, (3) confidence warning added when `citationCoverage < 1.0`
 - **T031 results:** All 3 tests fail — `metadata.citationCoverage` and `warnings` not implemented yet.
 - **Overall results:** 61 tests total, 57 pass, 4 fail. 1 suite fails (safety-filter import). Zero regressions to existing 57 passing tests. All new failures are expected TDD red phase.
+
+### Wave 3 Completion (2026-03-05T21:00:00Z)
+
+- **T029–T031 DELIVERED:** Citation deduplication tests (T029) with 2 of 3 passing. FR-007 safety filter TDD tests (T030) all 5 written, awaiting River's implementation. Uncited claim detection tests (T031) all 3 written, awaiting metadata enrichment. 11 new tests written. 57/61 tests passing. Ready for green-phase implementation handoff.

@@ -39,13 +39,31 @@ export class DefaultClassifier implements IntentClassifier {
     }
 
     if (bestCategory === null) {
-      return {
+      const fallbackResult: ClassifiedIntent = {
         category: IntentCategory.EXPERTISE_DISCOVERY,
         confidence: 0.1,
         rawInput: input,
         parameters: {},
       };
+      console.info(JSON.stringify({
+        event: 'classify',
+        method: 'classify',
+        category: fallbackResult.category,
+        confidence: fallbackResult.confidence,
+        keywordsMatched: [],
+        fallback: true,
+      }));
+      return fallbackResult;
     }
+
+    console.info(JSON.stringify({
+      event: 'classify',
+      method: 'classify',
+      category: bestCategory,
+      confidence: bestConfidence,
+      keywordsMatched: bestKeywords,
+      fallback: false,
+    }));
 
     return {
       category: bestCategory,
@@ -83,6 +101,13 @@ export class DefaultClassifier implements IntentClassifier {
     }
 
     if (results.length === 0) {
+      console.info(JSON.stringify({
+        event: 'classify_multi',
+        method: 'classifyMulti',
+        intentsDetected: 0,
+        fallback: true,
+        categories: [IntentCategory.EXPERTISE_DISCOVERY],
+      }));
       return [{
         category: IntentCategory.EXPERTISE_DISCOVERY,
         confidence: 0.1,
@@ -92,6 +117,19 @@ export class DefaultClassifier implements IntentClassifier {
     }
 
     results.sort((a, b) => b.confidence - a.confidence);
+
+    console.info(JSON.stringify({
+      event: 'classify_multi',
+      method: 'classifyMulti',
+      intentsDetected: results.length,
+      fallback: false,
+      categories: results.map(r => ({
+        category: r.category,
+        confidence: r.confidence,
+        keywordsMatched: r.parameters?.keywords ?? [],
+      })),
+    }));
+
     return results;
   }
 }
