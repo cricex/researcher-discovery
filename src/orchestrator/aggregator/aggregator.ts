@@ -2,7 +2,8 @@
  * Response Aggregator — merges multiple agent responses into a single output.
  *
  * Produces sectioned output grouped by agent, with deduplicated citations,
- * weighted-average confidence scoring, and merged timing metadata.
+ * weighted-average confidence scoring, citation coverage analysis,
+ * safety-filter enforcement, and merged timing metadata.
  */
 
 import {
@@ -15,6 +16,7 @@ import {
   Citation,
   OrchestrationResult,
 } from '../../specs/index.js';
+import { sanitizeRankingLanguage } from './safety-filter.js';
 
 export class DefaultAggregator implements ResponseAggregator {
   async aggregate(
@@ -23,6 +25,21 @@ export class DefaultAggregator implements ResponseAggregator {
     context: ExecutionContext,
   ): Promise<AggregatedResponse> {
     const status = this.resolveStatus(responses);
+
+    // T035: Sanitize agent content for prohibited ranking language
+    const safetyViolations: string[] = [];
+    for (const r of responses) {
+      if (r.status !== 'error' && r.content.trim()) {
+        const { sanitized, violations } = sanitizeRankingLanguage(r.content);
+        if (violations.length > 0) {
+          r.content = sanitized;
+          safetyViolations.push(...violations);
+          console.warn(
+            `[safety-filter] Agent "${r.agentId}": ${violations.length} violation(s) — ${violations.join(', ')}`,
+          );
+        }
+      }
+    }
 
     // Build sections from successful, non-empty responses keyed by agentId
     const sections = new Map<string, string>();
@@ -40,6 +57,15 @@ export class DefaultAggregator implements ResponseAggregator {
     const citations = this.extractCitations(responses);
     const overallConfidence = this.calculateConfidence(responses);
     const agentsInvoked = responses.map((r) => r.agentId);
+
+    // T033: Citation coverage scoring
+    const citationCoverage = this.calculateCitationCoverage(responses);
+    const warnings: string[] = [];
+    if (citationCoverage < 1.0) {
+      warnings.push(
+        `Citation coverage is ${(citationCoverage * 100).toFixed(0)}% — some factual claims are uncited`,
+      );
+    }
 
     const processingTimeMs = responses.reduce((sum, r) => {
       const time = r.metadata?.processingTimeMs as number | undefined;
@@ -64,8 +90,15 @@ export class DefaultAggregator implements ResponseAggregator {
       metadata: {
         processingTimeMs,
         agentsInvoked,
+        citationCount: citations.length,
+        citationCoverage,
+        ...(safetyViolations.length > 0 ? { safetyViolations } : {}),
       },
     };
+
+    if (warnings.length > 0) {
+      (result as unknown as Record<string, unknown>).warnings = warnings;
+    }
 
     return result;
   }
@@ -130,5 +163,51 @@ export class DefaultAggregator implements ResponseAggregator {
     const successful = responses.filter((r) => r.status !== 'error');
     if (successful.length === 0) return 0;
     return successful.reduce((acc, r) => acc + r.confidence, 0) / successful.length;
+  }
+
+  /**
+   * T033: Calculate citation coverage — ratio of cited factual sentences
+   * to total factual sentences across all successful agent responses.
+   */
+  private calculateCitationCoverage(responses: AgentResponse[]): number {
+    let totalFactual = 0;
+    let citedFactual = 0;
+
+    for (const r of responses) {
+      if (r.status === 'error' || !r.content.trim()) continue;
+
+      const sentences = this.splitIntoSentences(r.content);
+      for (const sentence of sentences) {
+        if (this.isFactualSentence(sentence)) {
+          totalFactual++;
+          if (/<cite>/.test(sentence)) {
+            citedFactual++;
+          }
+        }
+      }
+    }
+
+    if (totalFactual === 0) return 1.0;
+    return citedFactual / totalFactual;
+  }
+
+  /** Split text into sentences, avoiding false splits on abbreviations like "Dr." */
+  private splitIntoSentences(text: string): string[] {
+    return text
+      .split(/(?<=(?:\w{3,}|>)[.!?])\s+(?=[A-Z])/)
+      .filter((s) => s.trim().length > 0);
+  }
+
+  /** A sentence is factual if it contains numbers, proper nouns, or cite tags. */
+  private isFactualSentence(sentence: string): boolean {
+    if (/\d+/.test(sentence)) return true;
+    if (/<cite>/.test(sentence)) return true;
+
+    const clean = sentence.replace(/<cite>.*?<\/cite>/g, '').trim();
+    const words = clean.split(/\s+/);
+    for (let i = 1; i < words.length; i++) {
+      if (/^[A-Z]/.test(words[i])) return true;
+    }
+    return false;
   }
 }
