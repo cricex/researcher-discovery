@@ -1,0 +1,16 @@
+name: mcp-nih-reporter
+metadata:
+  template: mcp-nih-reporter-aca@0.0.1-beta
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  mcp:
+    project: .
+    host: containerapp
+    language: python
+    docker:
+      path: ./Dockerfile

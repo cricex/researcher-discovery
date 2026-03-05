@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 # Import MCP libraries
 try:
-    from mcp.server.fastmcp import FastMCP
+    from fastmcp import FastMCP
 except ImportError as e:
     logging.error(f"Failed to import MCP libraries: {e}")
     raise
@@ -434,9 +434,10 @@ async def search_projects(
         if covid_response:
             criteria["covid_response"] = [covid_response]
         
-        # Funding mechanism
+        # Funding mechanism (activity code like R01, F32, K99)
         if funding_mechanism:
-            criteria["funding_mechanism"] = funding_mechanism.strip().strip('"').strip("'")
+            codes = [c.strip() for c in funding_mechanism.strip().strip('"').strip("'").split(",")]
+            criteria["activity_codes"] = codes
             
         # Institute/Center code
         if ic_code:
@@ -620,7 +621,8 @@ async def search_combined(
             project_criteria["org_states"] = [org_state.upper()]
             
         if funding_mechanism:
-            project_criteria["funding_mechanism"] = funding_mechanism.strip().strip('"').strip("'")
+            codes = [c.strip() for c in funding_mechanism.strip().strip('"').strip("'").split(",")]
+            project_criteria["activity_codes"] = codes
             
         if ic_code:
             project_criteria["agency_ic_admin"] = ic_code.strip().strip('"').strip("'").upper()
@@ -690,5 +692,29 @@ async def search_combined(
         return f"Combined search failed: {str(e)}\nPlease check the logs for more details."
 
 # Run the server when this script is executed directly
+def run_server() -> None:
+    transport = os.getenv("MCP_TRANSPORT", "stdio").strip().lower()
+    host = os.getenv("HOST", "0.0.0.0").strip()
+
+    try:
+        port = int(os.getenv("PORT", "8000"))
+    except ValueError:
+        logger.warning("Invalid PORT value provided; defaulting to 8000")
+        port = 8000
+
+    if transport in {"http", "streamable-http"}:
+        logger.info(f"Starting MCP server with HTTP on {host}:{port}/mcp")
+        mcp.run(transport="http", host=host, port=port)
+        return
+
+    if transport == "sse":
+        logger.info(f"Starting MCP server with SSE transport on {host}:{port}")
+        mcp.run(transport="sse", host=host, port=port)
+        return
+
+    logger.info("Starting MCP server with stdio transport")
+    mcp.run()
+
+
 if __name__ == "__main__":
-    mcp.run(transport='stdio')
+    run_server()

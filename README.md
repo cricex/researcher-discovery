@@ -86,6 +86,82 @@ The search results will be returned in a structured format containing project de
 - Funding information
 - Project dates and status
 
+## Running As A Containerized Web App
+
+This server now supports multiple transports using environment variables:
+
+- `MCP_TRANSPORT=stdio` (default, local desktop clients)
+- `MCP_TRANSPORT=streamable-http` (recommended for cloud/containers)
+- `MCP_TRANSPORT=sse` (legacy)
+
+When running in HTTP mode, the MCP endpoint is available at:
+
+- `http://<host>:<port>/mcp`
+
+### Local Docker Run
+
+Build and run locally:
+
+```bash
+docker build -t nih-reporter-mcp:local .
+docker run --rm -p 8000:8000 -e MCP_TRANSPORT=streamable-http -e HOST=0.0.0.0 -e PORT=8000 nih-reporter-mcp:local
+```
+
+Then connect your MCP client to:
+
+- `http://localhost:8000/mcp`
+
+## Deploying To Azure Container Apps (ACA)
+
+This repository includes an `azd` + Bicep setup (`azure.yaml` and `infra/main.bicep`) so you can provision ACA infrastructure with `azd provision`.
+
+### 1. Initialize azd environment
+
+From the repository root:
+
+```bash
+azd auth login
+azd env new
+```
+
+### 2. Provision infrastructure with Bicep
+
+```bash
+azd provision
+```
+
+This creates:
+
+- Resource group
+- Log Analytics workspace
+- Azure Container Registry (ACR)
+- Container Apps environment
+- Container App (`mcp`) configured for `streamable-http` on port `8000`
+
+### 3. Deploy application image (recommended)
+
+Provisioning creates the infrastructure and an initial placeholder image. To deploy this repo's Docker image:
+
+```bash
+azd deploy mcp
+```
+
+Or do both steps in one command:
+
+```bash
+azd up
+```
+
+### 4. Get the endpoint
+
+```bash
+azd env get-value SERVICE_MCP_URI
+```
+
+Use:
+
+- `https://<fqdn>/mcp`
+
 ## Debugging
 
 A log file will be created in the root folder when the MCP attempts to run in a client (e.g. Claude Desktop). Check there if you're having trouble.
