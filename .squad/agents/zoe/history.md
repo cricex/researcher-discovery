@@ -49,3 +49,14 @@
 - **Pattern:** Tests cast `AggregatedResponse` to `OrchestrationResult` to assert the enriched shape (sections Map, citations[], overallConfidence, reasoning, metadata.processingTimeMs, metadata.agentsInvoked) — same pattern as T011 integration tests
 - **Results:** 3 existing tests pass, all 9 new tests fail as expected (stub aggregator returns `AggregatedResponse` without sections/citations/confidence/metadata). Zero regressions.
 - **Dependency:** T021/T022 will implement sectioned aggregation in `DefaultAggregator` to make these tests pass (green phase)
+
+### T023/T024 — Error Handling & Graceful Degradation TDD Tests (US3)
+- **T023 file:** `tests/error-handling/timeout.test.ts` — 4 TDD red-phase tests for per-agent timeout handling
+- **T024 file:** `tests/error-handling/degradation.test.ts` — 5 TDD red-phase tests for graceful degradation
+- **T023 test coverage:** (1) slow agent timeout → partial results + AgentErrorEntry, (2) all agents timeout → status 'error' + user-friendly message, (3) AbortController enforcement → slow agent aborted before completion, (4) metadata.timedOutAgents lists which agents timed out
+- **T024 test coverage:** (1) 1-of-3 agents offline → 2 agents' results + error entry, (2) malformed response → error caught + others returned, (3) empty results → handled gracefully + warning in metadata, (4) network error → captured as error entry + others proceed, (5) partial results include warnings about failed agents
+- **Mock agents created:** `createFastAgent()`, `createSlowAgent(delayMs)`, `createHealthyAgent()`, `createOfflineAgent()`, `createMalformedAgent()`, `createEmptyAgent()`, `createNetworkErrorAgent()` — all inline in test files, following existing patterns
+- **EnrichedResult type:** Tests cast to `EnrichedResult` extending `OrchestrationResult` with `errors: AgentErrorEntry[]`, `warnings: string[]`, and `status: string` — the fields T025-T028 need to add
+- **Results:** All 9 new tests fail as expected (TDD red phase). No regressions to the existing 36 passing tests. Total test count: 55 (36 pass, 19 fail — 10 pre-existing TDD failures + 9 new).
+- **Dependency:** T025-T028 will implement per-agent timeouts, error metadata enrichment, and warning propagation to make these tests pass (green phase)
+- **Wave 2 Phase 4 (2026-03-05T20:58):** T023+T024 error handling and degradation TDD red-phase test suite completed. 4 timeout scenario tests written. 5 degradation & fallback tests written. All 9 tests failing as expected for TDD red phase. Ready for T025 implementation phase to turn tests green. River completed T019 multi-label classifier in parallel; both agents executed without blockers.

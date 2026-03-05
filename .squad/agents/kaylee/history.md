@@ -10,6 +10,8 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+- **Sectioned aggregation (T021+T022):** `DefaultAggregator` now returns an object satisfying both `AggregatedResponse` and `OrchestrationResult`. Sections are a `Map<string, string>` keyed by `agentId`; empty-content and error responses are excluded from sections but error agents remain in `metadata.agentsInvoked`. Citations are extracted from `<cite>tag</cite>` patterns in content and from `metadata.citations` arrays, deduplicated by exact string match, and parsed into `{ raw, sourceType, sourceId }` by splitting on the first underscore. Confidence is a simple average of successful-agent confidences only. All 12 T018 aggregator tests pass green.
+
 - **Agent HTTP contract types** live in `src/specs/agent-contract.ts`. These define the wire-format shapes (AgentRequest, AgentContractResponse, AgentErrorResponse, AgentHealthResponse) and AgentErrorCode enum. Property names are camelCase; the HTTP client layer is responsible for snake_case mapping. Spec source: `specs/001-orchestration-agent/contracts/agent-contract-spec.md`.
 - The existing specs style uses JSDoc on every exported type/interface, module-level doc comments, and `.js` extensions in barrel exports. Follow this pattern for any new spec files.
 - **Team Updates (Phase 1 Setup):** River pivoted IntentCategory to research domain (EXPERTISE_DISCOVERY, RESEARCH_OUTPUT, COLLABORATION_INSIGHT, POLICY_COMPLIANCE, GENERAL) with new `context` field on ClassifiedIntent. Wash extended response.ts with Citation, OrchestrationResult, AgentErrorEntry — all 15 tests passing. New shared contract contracts are aligned for orchestrator core implementation.
