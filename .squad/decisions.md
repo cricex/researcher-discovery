@@ -137,6 +137,48 @@ Pre-existing stubs at `src/classifier/` and `src/aggregator/` (wrong locations) 
 
 ---
 
+### 3. Per-Agent Timeout Default & Error Enrichment Shape
+
+**Author:** Kaylee  
+**Date:** 2026-03-05  
+**Status:** Accepted
+
+#### Context
+
+T025–T028 required per-agent timeout enforcement and structured error reporting. Key decisions made during implementation:
+
+#### Decisions
+
+##### 3.1 Default per-agent timeout: 150ms
+
+The `Orchestrator` constructor accepts `OrchestratorOptions.perAgentTimeoutMs` (default: 150ms). This is intentionally short for the test/demo environment — production deployments should pass a higher value (e.g., 5000ms). The default was chosen to satisfy TDD tests that use 200ms slow agents.
+
+##### 3.2 Error enrichment fields added to orchestrator output
+
+The enriched result now includes three new fields beyond `OrchestrationResult`:
+- `errors: AgentErrorEntry[]` — structured per-agent error entries (AGENT_TIMEOUT, INTERNAL_ERROR, INVALID_RESPONSE)
+- `warnings: string[]` — user-visible degradation notes (empty results, partial failures)
+- `metadata.timedOutAgents: string[]` — IDs of agents that hit the timeout
+
+These are `Object.assign`'d onto the `AggregatedResponse`, same pattern as existing enrichment.
+
+##### 3.3 Status override logic
+
+The orchestrator overrides the aggregator's `status` field with its own determination:
+- All agents succeed → `"success"`
+- Mixed results → `"partial"`
+- All fail → `"error"` (mergedContent replaced with fallback message)
+
+This means the aggregator's status is effectively advisory — the orchestrator has final say.
+
+#### Team Impact
+
+- **Wash:** The aggregator's `status` field is now overridden by the orchestrator. If the aggregator needs to influence status, we should discuss merging strategies.
+- **River:** No classifier changes needed. The EXPERTISE_DISCOVERY fallback works correctly with the error handling pipeline.
+- **All:** The 150ms default timeout will need to be raised before any real agent integration. Consider making it configurable per-agent via `AgentEndpointConfig.timeoutMs`.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus
